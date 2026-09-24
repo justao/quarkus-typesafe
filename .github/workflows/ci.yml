@@ -1,4 +1,4 @@
-## A basic GitHub Actions workflow for your Quarkus application.
+## A basic GitHub Actions workflow for the quarkus-typesafe library.
 
 name: CI build
 
@@ -24,5 +24,18 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build
+      # The client this extension wires up is the reference typesafe-java-sdk, which is not
+      # published yet. It is built from its own repository and installed into the local Maven
+      # repository, which every module here resolves from. The reference checkout is not
+      # committed to this repository, so CI fetches it.
+      - name: Check out the reference TypeSafe SDK
+        uses: actions/checkout@v5
+        with:
+          repository: spring-ai-community/spring-ai-typesafe
+          path: spring-ai-typesafe
+
+      - name: Install typesafe-java-sdk into the local Maven repository
+        run: ./gradlew installTypeSafeSdk
+
+      - name: Build and test
         run: ./gradlew build

@@ -8,4 +8,25 @@ pluginManagement {
         id "${quarkusPluginId}" version "${quarkusPluginVersion}"
     }
 }
-rootProject.name='quarkus-typesafe'
+
+/*
+ * A Quarkus library, laid out the way a Quarkus extension is:
+ *
+ *   runtime/           the code an application links against: the configuration mapping,
+ *                      the CDI producers and the extension descriptor
+ *   deployment/        the build steps Quarkus runs while augmenting the application
+ *   integration-tests/ an application that consumes the extension, and the tests that
+ *                      prove the beans appear and reach the wire
+ *
+ * The project names are the Maven artifact ids rather than the directory names, because
+ * the runtime jar's descriptor names the deployment artifact by Maven coordinates and the
+ * deployment module's pom has to agree with it for the Quarkus bootstrap to link the two.
+ */
+rootProject.name = 'quarkus-typesafe-parent'
+
+include 'quarkus-typesafe'
+include 'quarkus-typesafe-deployment'
+include 'integration-tests'
+
+project(':quarkus-typesafe').projectDir = file('runtime')
+project(':quarkus-typesafe-deployment').projectDir = file('deployment')

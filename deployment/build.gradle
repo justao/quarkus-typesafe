@@ -1,0 +1,42 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+description = 'Quarkus build steps for the TypeSafe AI client extension'
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    // Spelled out rather than left to the platform: this coordinate lands in the published
+    // pom, and the Quarkus bootstrap has to be able to resolve it from there.
+    api "io.quarkus:quarkus-core-deployment:${quarkusPlatformVersion}"
+    implementation project(':quarkus-typesafe')
+
+    // Generates META-INF/quarkus-build-steps.list, which is how the Quarkus bootstrap finds
+    // the processor below. A build step that is not in that list never runs, and nothing
+    // about a missing entry fails to compile.
+    annotationProcessor 'io.quarkus:quarkus-extension-processor'
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion("${javaVersion}")
+    targetCompatibility = JavaVersion.toVersion("${javaVersion}")
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}

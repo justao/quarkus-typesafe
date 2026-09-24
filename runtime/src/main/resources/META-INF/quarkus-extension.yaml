@@ -1,0 +1,12 @@
+---
+name: "TypeSafe AI"
+description: "TypeSafe AI System One (Jev) client integration: injects a TypeSafeClient configured from quarkus.typesafe.*"
+metadata:
+  keywords:
+    - "typesafe"
+    - "jev"
+    - "ai"
+    - "llm"
+  categories:
+    - "ai"
+  status: "experimental"

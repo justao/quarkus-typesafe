@@ -1,0 +1,46 @@
+plugins {
+    id 'java'
+    id 'io.quarkus'
+}
+
+description = 'An application that consumes the TypeSafe extension, and the tests that prove it is wired up'
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    implementation project(':quarkus-typesafe')
+    implementation 'io.quarkus:quarkus-arc'
+
+    /*
+     * The SDK brings its own transport (Spring's RestClient over java.net.http) and its own
+     * Jackson, so no JSON extension is needed here; what these tests exercise is that the
+     * beans exist, are configured from quarkus.typesafe.* and reach the wire.
+     */
+    testImplementation 'io.quarkus:quarkus-junit'
+    testImplementation 'org.assertj:assertj-core'
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion("${javaVersion}")
+    targetCompatibility = JavaVersion.toVersion("${javaVersion}")
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+
+/*
+ * An extension is linked to its deployment module by the Maven coordinates in
+ * META-INF/quarkus-extension.properties, and the Quarkus bootstrap resolves that artifact
+ * through Maven repositories — mavenLocal included — even when the runtime half is a project
+ * dependency of this build. Publishing both modules locally first is what makes the test
+ * application augmentable without asking anyone to run `publishToMavenLocal` by hand.
+ */
+tasks.matching { it.name == 'test' || it.name.startsWith('quarkus') }.configureEach {
+    dependsOn ':quarkus-typesafe:publishToMavenLocal', ':quarkus-typesafe-deployment:publishToMavenLocal'
+}

@@ -1,33 +1,39 @@
-plugins {
-    id 'java'
-    id 'io.quarkus'
+/*
+ * Aggregator for the three modules of the TypeSafe Quarkus library. Nothing is published
+ * from here: the artifacts are :quarkus-typesafe (runtime) and :quarkus-typesafe-deployment.
+ *
+ * Gradle configuration is declared per module rather than here, so each module can be read
+ * on its own.
+ */
+allprojects {
+    group = 'org.quarkusverse'
+    version = '0.1.0-SNAPSHOT'
 }
 
-repositories {
-    mavenCentral()
-    mavenLocal()
-}
+def isWindows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
 
-dependencies {
-    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
-    implementation 'io.quarkus:quarkus-jackson'
-    implementation 'io.quarkus:quarkus-arc'
-    testImplementation 'io.quarkus:quarkus-junit'
-}
-
-group = 'org.quarkusverse'
-version = '0.0.1-SNAPSHOT'
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_25
-    targetCompatibility = JavaVersion.VERSION_25
-}
-
-compileJava {
-    options.encoding = 'UTF-8'
-    options.compilerArgs << '-parameters'
-}
-
-compileTestJava {
-    options.encoding = 'UTF-8'
+/*
+ * The client this library wires up is the reference typesafe-java-sdk, which is not on
+ * Maven Central yet. It has to be installed into the local Maven repository once before
+ * anything here compiles, because every module declares `mavenLocal()` and resolves the SDK
+ * from there:
+ *
+ *     ./gradlew installTypeSafeSdk
+ *
+ * The reference project is expected at spring-ai-typesafe/. It is not part of this build:
+ * it is a Maven reactor of its own, so it is driven through its own Maven wrapper.
+ */
+tasks.register('installTypeSafeSdk', Exec) {
+    group = 'build setup'
+    description = 'Installs typesafe-java-sdk from the reference project into the local Maven repository.'
+    workingDir = file('spring-ai-typesafe')
+    commandLine(isWindows
+            ? ['cmd', '/c', 'mvnw.cmd', '--no-transfer-progress', '-pl', 'typesafe-java-sdk', '-am', 'install', '-DskipTests']
+            : ['./mvnw', '--no-transfer-progress', '-pl', 'typesafe-java-sdk', '-am', 'install', '-DskipTests'])
+    doFirst {
+        if (!new File(workingDir, 'pom.xml').exists()) {
+            throw new GradleException("The reference project is missing from ${workingDir}. " +
+                    "Clone https://github.com/spring-ai-community/spring-ai-typesafe into spring-ai-typesafe/ first.")
+        }
+    }
 }

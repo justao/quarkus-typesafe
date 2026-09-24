@@ -39,3 +39,8 @@ nb-configuration.xml
 /.quarkus/cli/plugins/
 # TLS Certificates
 .certs/
+
+# The reference project this library is built against, cloned next to this build and
+# installed into the local Maven repository by the installTypeSafeSdk task. It is a Maven
+# reactor of its own; CI checks it out here, so it is not committed.
+/spring-ai-typesafe/

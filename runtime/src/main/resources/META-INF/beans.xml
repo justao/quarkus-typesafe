@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Marks the runtime artifact as a bean archive, so ArC indexes it and finds
+  TypeSafeClientProducer wherever the extension is on the classpath. Without it the
+  producers would only be discovered because the artifact is an extension, which would
+  leave the beans missing in builds that use the runtime jar as a plain library.
+-->
+<beans xmlns="https://jakarta.ee/xml/ns/jakartaee"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/beans_4_0.xsd"
+       version="4.0"
+       bean-discovery-mode="annotated">
+</beans>

@@ -1,0 +1,62 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+description = 'TypeSafe AI System One (Jev) client integration for Quarkus'
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+
+    /*
+     * The client is the API this library exposes: an application injects TypeSafeClient and
+     * builds request objects out of the SDK's own types, so the SDK is an `api` dependency
+     * and not an implementation detail.
+     */
+    api "org.springaicommunity:typesafe-java-sdk:${typesafeSdkVersion}"
+
+    /*
+     * Versions are spelled out rather than left to the platform: these coordinates end up in
+     * the published pom, and a pom entry without a version is one a consumer cannot resolve.
+     * They are the same versions the platform below aligns.
+     */
+    api "io.quarkus:quarkus-core:${quarkusPlatformVersion}"
+    api "io.quarkus:quarkus-arc:${quarkusPlatformVersion}"
+
+    // Generates META-INF/quarkus-config-roots.list and the configuration documentation
+    // from the javadoc on TypeSafeConfig.
+    annotationProcessor 'io.quarkus:quarkus-extension-processor'
+}
+
+java {
+    sourceCompatibility = JavaVersion.toVersion("${javaVersion}")
+    targetCompatibility = JavaVersion.toVersion("${javaVersion}")
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    // Producer method parameter names and record component names are read reflectively.
+    options.compilerArgs << '-parameters'
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+
+processResources {
+    /*
+     * The descriptor names the deployment artifact by Maven coordinates, and that version
+     * has to be the one this build produces, so it is expanded rather than typed twice.
+     */
+    filesMatching('META-INF/quarkus-extension.properties') {
+        expand(group: project.group.toString(), version: project.version.toString())
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
