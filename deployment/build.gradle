@@ -11,12 +11,24 @@ dependencies {
     // Spelled out rather than left to the platform: this coordinate lands in the published
     // pom, and the Quarkus bootstrap has to be able to resolve it from there.
     api "io.quarkus:quarkus-core-deployment:${quarkusPlatformVersion}"
+    // BeanDefiningAnnotationBuildItem and SyntheticBeanBuildItem, which the service layer
+    // registers its interfaces with.
+    api "io.quarkus:quarkus-arc-deployment:${quarkusPlatformVersion}"
     implementation project(':quarkus-typesafe')
 
     // Generates META-INF/quarkus-build-steps.list, which is how the Quarkus bootstrap finds
     // the processor below. A build step that is not in that list never runs, and nothing
     // about a missing entry fails to compile.
     annotationProcessor 'io.quarkus:quarkus-extension-processor'
+
+    /*
+     * The validator is a pure function of a Jandex index, so its rules are tested here with
+     * plain JUnit rather than through a Quarkus application: the fixtures are interfaces that
+     * have to be rejected, and starting an application to find that out would be a slow way
+     * to read a build log.
+     */
+    testImplementation 'io.quarkus:quarkus-junit'
+    testImplementation 'org.assertj:assertj-core'
 }
 
 java {
@@ -31,6 +43,10 @@ compileJava {
 
 compileTestJava {
     options.encoding = 'UTF-8'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }
 
 publishing {

@@ -22,11 +22,14 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.StringJoiner;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 /**
@@ -34,17 +37,26 @@ import com.sun.net.httpserver.HttpServer;
  *
  * <p>
  * The tests that configure an API key point {@code quarkus.typesafe.base-url} at this
- * server instead of the real one: an assertion about which headers, model and bearer token
- * the injected client puts on the wire is only worth making against something that records
- * them, and the real API costs tokens and needs a key.
+ * server instead of the real one: an assertion about which questions, model and state the
+ * extension puts on the wire is only worth making against something that records them, and
+ * the real API costs tokens and needs a key.
  *
  * <p>
- * The response bodies are the documented ones — the same literals the reference SDK asserts
- * against — so a parsing failure here is a real failure and not an artifact of the fixture.
+ * A request to {@code /v1/systemone} is answered with the next scripted response, or with a
+ * default body carrying one noul answer named {@code probe}. Scripting is what makes the
+ * interesting cases expressible — several answers in one body, an answer of a kind the
+ * method did not declare, an error status.
  */
 final class MockTypeSafeServer {
 
 	static final String REQUEST_ID = "req_0123456789";
+
+	private static final String SYSTEM_ONE_PATH = "/v1/systemone";
+
+	private static final String MODELS_PATH = "/v1/models";
+
+	/** The levels the {@link #score(double, int)} helper builds a legend from. */
+	private static final String[] DEFAULT_LEVELS = { "Calm", "Frustrated", "Very angry" };
 
 	private static final String SYSTEM_ONE_BODY = """
 			{"model":"jev-1.13.0","answers":{"probe":{"type":"noul","noul":0.5}},"usage":{"input_tokens":10,"output_tokens":2}}""";
@@ -59,7 +71,11 @@ final class MockTypeSafeServer {
 
 	private final List<String> requestBodies = new CopyOnWriteArrayList<>();
 
+	private final List<String> requestPaths = new CopyOnWriteArrayList<>();
+
 	private final List<String> authorizationHeaders = new CopyOnWriteArrayList<>();
+
+	private final Queue<Response> scripted = new ConcurrentLinkedQueue<>();
 
 	private MockTypeSafeServer(HttpServer server) {
 		this.server = server;
@@ -82,8 +98,8 @@ final class MockTypeSafeServer {
 		try {
 			HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
 			MockTypeSafeServer mock = new MockTypeSafeServer(server);
-			server.createContext("/v1/systemone", exchange -> mock.respond(exchange, SYSTEM_ONE_BODY));
-			server.createContext("/v1/models", exchange -> mock.respond(exchange, MODELS_BODY));
+			server.createContext(SYSTEM_ONE_PATH, exchange -> mock.respondSystemOne(exchange));
+			server.createContext(MODELS_PATH, exchange -> mock.respond(exchange, MODELS_BODY));
 			ExecutorService executor = Executors.newCachedThreadPool(runnable -> {
 				Thread thread = new Thread(runnable, "mock-jev");
 				// Daemon threads, and a shutdown hook, so the test JVM can still exit.
@@ -118,6 +134,20 @@ final class MockTypeSafeServer {
 	}
 
 	/**
+	 * @return the path of every request received since the last {@link #reset()}
+	 */
+	List<String> requestPaths() {
+		return List.copyOf(this.requestPaths);
+	}
+
+	/**
+	 * @return how many requests arrived since the last {@link #reset()}
+	 */
+	int requestCount() {
+		return this.requestBodies.size();
+	}
+
+	/**
 	 * @return the body of the most recent request, or an empty string when none arrived
 	 */
 	String lastRequestBody() {
@@ -133,27 +163,114 @@ final class MockTypeSafeServer {
 	}
 
 	/**
-	 * Forgets the recorded requests, so a test asserts about its own call and not about
-	 * whatever ran before it.
+	 * Queues the answer the next {@code /v1/systemone} request gets.
+	 * @param body the response body
+	 */
+	void respondNext(String body) {
+		this.scripted.add(new Response(200, body));
+	}
+
+	/**
+	 * Queues an error the next {@code /v1/systemone} request gets.
+	 * @param status the status code
+	 * @param body the response body
+	 */
+	void respondNext(int status, String body) {
+		this.scripted.add(new Response(status, body));
+	}
+
+	/**
+	 * Forgets the recorded requests and the queued answers, so a test asserts about its own
+	 * call and not about whatever ran before it.
 	 */
 	void reset() {
 		this.requestBodies.clear();
+		this.requestPaths.clear();
 		this.authorizationHeaders.clear();
+		this.scripted.clear();
+	}
+
+	private void respondSystemOne(HttpExchange exchange) throws IOException {
+		Response next = this.scripted.poll();
+		respond(exchange, next == null ? new Response(200, SYSTEM_ONE_BODY) : next);
 	}
 
 	private void respond(HttpExchange exchange, String body) throws IOException {
+		respond(exchange, new Response(200, body));
+	}
+
+	private void respond(HttpExchange exchange, Response response) throws IOException {
 		this.requestBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+		this.requestPaths.add(exchange.getRequestURI().getPath());
 		String authorization = exchange.getRequestHeaders().getFirst("Authorization");
 		this.authorizationHeaders.add(authorization != null ? authorization : "");
 
-		byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+		byte[] payload = response.body().getBytes(StandardCharsets.UTF_8);
 		exchange.getResponseHeaders().add("Content-Type", "application/json");
 		// The client lifts the request id off this header onto the response object.
 		exchange.getResponseHeaders().add("x-typesafe-request-id", REQUEST_ID);
-		exchange.sendResponseHeaders(200, payload.length);
+		exchange.sendResponseHeaders(response.status(), payload.length);
 		try (OutputStream out = exchange.getResponseBody()) {
 			out.write(payload);
 		}
+	}
+
+	/**
+	 * @param name the answer's key
+	 * @param answer the answer's JSON
+	 * @return a response body carrying that one answer
+	 */
+	static String body(String name, String answer) {
+		return body(Map.of(name, answer));
+	}
+
+	/**
+	 * @param answers the answers, keyed by question name
+	 * @return a response body carrying them
+	 */
+	static String body(Map<String, String> answers) {
+		StringJoiner joined = new StringJoiner(",", "\"answers\":{", "}");
+		answers.forEach((name, answer) -> joined.add("\"" + name + "\":" + answer));
+		return "{\"model\":\"jev-1.13.0\"," + joined + ",\"usage\":{\"input_tokens\":10,\"output_tokens\":2}}";
+	}
+
+	/**
+	 * @param value the truth value
+	 * @return a noul answer
+	 */
+	static String noul(double value) {
+		return "{\"type\":\"noul\",\"noul\":" + value + "}";
+	}
+
+	/**
+	 * @param label the selected option
+	 * @return a choice answer
+	 */
+	static String choice(String label) {
+		return "{\"type\":\"choice\",\"choice\":\"" + label + "\",\"probabilities\":{\"" + label
+				+ "\":0.9},\"confidence\":0.9}";
+	}
+
+	/**
+	 * A score answer over the three levels {@link #DEFAULT_LEVELS} names, with the highest
+	 * probability — and so the nearest level — on {@code nearestLevel}.
+	 * @param value the probability-weighted score
+	 * @param nearestLevel the level carrying the most probability
+	 * @return a score answer
+	 */
+	static String score(double value, int nearestLevel) {
+		StringJoiner probabilities = new StringJoiner(",", "{", "}");
+		StringJoiner legend = new StringJoiner(",", "{", "}");
+		for (int level = 0; level < DEFAULT_LEVELS.length; level++) {
+			probabilities.add("\"" + level + "\":" + (level == nearestLevel ? "0.65" : "0.05"));
+			legend.add("\"" + level + "\":\"" + DEFAULT_LEVELS[level] + "\"");
+		}
+		return "{\"type\":\"score\",\"score\":" + value + ",\"legend\":" + legend + ",\"probabilities\":" + probabilities
+				+ ",\"confidence\":0.78}";
+	}
+
+	/** One scripted response. */
+	private record Response(int status, String body) {
 	}
 
 }

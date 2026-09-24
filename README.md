@@ -32,7 +32,7 @@ public class TriageService {
 
 | Module | Artifact | What it is |
 |---|---|---|
-| `runtime/` | `org.quarkusverse:quarkus-typesafe` | The configuration mapping, the CDI producers, the extension descriptor. This is the dependency an application declares. |
+| `runtime/` | `org.quarkusverse:quarkus-typesafe` | The configuration mapping, the CDI producers, the declarative service annotations and their proxy, the extension descriptor. This is the dependency an application declares. |
 | `deployment/` | `org.quarkusverse:quarkus-typesafe-deployment` | The build steps: what Quarkus runs while augmenting an application. Never declared by an application; it is pulled in through the runtime descriptor. |
 | `integration-tests/` | — | An application that consumes the extension, and the tests that prove the beans appear, are configured and reach the wire. |
 
